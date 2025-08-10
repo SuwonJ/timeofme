@@ -1,30 +1,145 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
+:root {
+    --background-color: #ffffff;
+    --card-background: #f5f5f5;
+    --text-color: #212121;
+    --subtle-text-color: #757575;
+    --primary-color: #111111;
+    --border-color: #bdbdbd;
+    --shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
 body {
-  font-family: system-ui, sans-serif;
-  margin: 0 auto;
-  max-width: 600px;
-  background: #f9f9f9;
-  color: #222;
-  padding: 1.5em;
+    font-family: "Pretendard", system-ui, sans-serif;
+    margin: 0 auto;
+    max-width: 700px;
+    background: var(--background-color);
+    color: var(--text-color);
+    padding: 2em;
 }
-header {
-  text-align: center;
-  margin-bottom: 2em;
+h1 {
+    font-family: "Pretendard", system-ui, sans-serif;
+    font-weight: 900;
+    color: var(--text-color);
 }
+#details h2 {
+    font-weight: 800;
+    color: var(--text-color);
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5em;
+}
+
 #summary {
-  background: #e6f7ff;
-  border-left: 4px solid #1890ff;
-  padding: 1em;
-  margin-bottom: 2em;
+    background: var(--card-background);
+    border-left: 4px solid var(--primary-color);
+    padding: 1.5em;
+    margin-bottom: 2em;
+    border-radius: 8px;
+    box-shadow: var(--shadow);
 }
+
 #details {
-  background: #fff;
-  padding: 1em;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
 }
-footer {
-  margin-top: 3em;
-  text-align: center;
-  color: #888;
+
+.interval-list {
+    list-style: none;
+    padding: 0;
 }
-a { color: #1890ff; }
+
+.interval-list li {
+    display: flex;
+    align-items: flex-start;
+    min-height: 60px;
+}
+li {
+    margin-top: 0.5em;
+    align-items: left;
+}
+
+.time-label {
+    width: 100px;
+    padding-right: 20px;
+    text-align: right;
+    font-size: 0.9em;
+    color: var(--subtle-text-color);
+    padding-top: 12px; /* Align with top of blob */
+}
+
+.timeline-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.timeline-blob {
+    width: 45px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.2s ease;
+}
+
+.blob-circle {
+    height: 45px;
+    border-radius: 50%;
+}
+
+.blob-pill {
+    border-radius: 10px;
+    border: 3px solid var(--primary-color);
+}
+
+.blob-pill.first {
+    border-top-left-radius: 25px;
+    border-top-right-radius: 25px;
+}
+
+.blob-pill.last {
+    border-bottom-left-radius: 25px;
+    border-bottom-right-radius: 25px;
+}
+
+.timeline-blob .activity-icon {
+    font-size: 1.5em;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.interval-list li:last-child .timeline-path {
+    background-image: none;
+}
+
+.activity-details {
+    padding-left: 20px;
+    padding-top: 10px;
+    flex-grow: 1;
+}
+
+.activity-details .activity-name {
+    font-weight: 500;
+}
+
+.activity-details .duration-info {
+    font-size: 0.85em;
+    color: var(--subtle-text-color);
+}
+
+.task-list {
+    list-style: none;
+    padding: 0;
+    margin-top: 1em;
+}
+
+.task-list li {
+    background: var(--card-background);
+    padding: 12px 15px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border-left: 5px solid var(--subtle-text-color);
+}
