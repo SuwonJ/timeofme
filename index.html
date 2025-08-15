@@ -5,6 +5,8 @@
         <title>SuwonJ's timeto.me</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="stylesheet" href="style.css" />
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     </head>
     <body>
         <header>
@@ -15,11 +17,46 @@
                 app doesn't have the functionality to do this. Just made for fun
                 for some motivation.
             </p>
+            <div class="date-nav-container">
+                <input type="date" id="date-picker">
+                <button id="yesterday-btn">Yesterday</button>
+                <button id="prev-day-btn">◀</button>
+                <button id="next-day-btn">▶</button>
+            </div>
         </header>
+
+        <div class="tabs">
+            <button class="tab-link active" data-range="daily">Daily</button>
+            <button class="tab-link" data-range="weekly">Weekly</button>
+            <button class="tab-link" data-range="monthly">Monthly</button>
+        </div>
+
         <section id="summary">
             <p>Loading latest backup...</p>
         </section>
+        <section id="dashboard" class="grid-container"></section>
+        <section id="insights" class="grid-container">
+            <div id="activity-chart-container" class="chart-card">
+                <div class="chart-header">
+                    <h3>Activity Chart</h3>
+                    <div class="chart-type-switcher">
+                        <button class="chart-type-btn active" data-charttype="bar">Bar</button>
+                        <button class="chart-type-btn" data-charttype="pie">Pie</button>
+                        <button class="chart-type-btn" data-charttype="doughnut">Doughnut</button>
+                    </div>
+                </div>
+                <div class="chart-filters">
+                    <label><input type="checkbox" id="exclude-common"> Exclude Routines & Sleep</label>
+                </div>
+                <canvas id="activityChart"></canvas>
+            </div>
+            <div id="sleep-analysis-container" class="chart-card">
+                 <h3>Sleep Analysis</h3>
+                 <div id="sleep-analysis"></div>
+            </div>
+        </section>
         <section id="details"></section>
+        <section id="tasks-section"></section>
         <script src="script.js"></script>
     </body>
 </html>
