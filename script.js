@@ -1,13 +1,86 @@
 let chartInstance = null;
 let currentRange = 'daily';
 let currentChartType = 'bar';
+const GIST_ID_DEFAULT = "YOUR_GIST_ID";
+const GIST_FILE = "timetome_backup.json";
+const gistIdFromUrl = new URLSearchParams(window.location.search).get("gist");
+const GIST_ID = gistIdFromUrl || GIST_ID_DEFAULT;
 
 Chart.register(ChartDataLabels);
 
 async function fetchLogFile() {
-  const res = await fetch("./backups/log.json");
-  if (!res.ok) throw new Error(`Failed to fetch log.json: ${res.statusText}`);
-  return await res.json();
+  if (!GIST_ID || GIST_ID === "YOUR_GIST_ID") {
+    throw new Error("Set GIST_ID_DEFAULT or open the page with ?gist=<your_gist_id>");
+  }
+  const res = await fetch(`https://api.github.com/gists/${GIST_ID}`);
+  if (!res.ok) throw new Error(`Failed to fetch gist: ${res.status} ${res.statusText}`);
+
+  const gist = await res.json();
+  const file = gist.files?.[GIST_FILE];
+  if (!file) throw new Error(`Missing ${GIST_FILE} in gist`);
+
+  if (file.content) {
+    return JSON.parse(file.content);
+  }
+
+  const rawRes = await fetch(file.raw_url);
+  if (!rawRes.ok) throw new Error(`Failed to fetch gist raw file: ${rawRes.status} ${rawRes.statusText}`);
+  return await rawRes.json();
+}
+
+function extractEmoji(text) {
+  const match = (text || "").match(/^(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
+  return match ? match[0] : "";
+}
+
+function normalizeActivityName(text) {
+  return (text || "")
+    .replace(/#\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseRgbaString(rgbaString) {
+  if (!rgbaString) return "rgba(204, 204, 204, 1)";
+  const parts = rgbaString.split(",").map((v) => Number(v.trim()));
+  if (parts.length < 3 || parts.some(Number.isNaN)) {
+    return "rgba(204, 204, 204, 1)";
+  }
+  const [r, g, b, a = 255] = parts;
+  return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
+}
+
+function buildActivityMap(backup) {
+  if (Array.isArray(backup.activities) && backup.activities.length > 0) {
+    return new Map(
+      backup.activities.map((a) => [
+        a[0],
+        {
+          name: a[1],
+          color: parseRgbaString(a[5]),
+          icon: a[6] || "",
+        },
+      ]),
+    );
+  }
+
+  if (Array.isArray(backup.goals) && backup.goals.length > 0) {
+    return new Map(
+      backup.goals.map((g) => {
+        const rawName = g[3] || "";
+        return [
+          g[0],
+          {
+            name: normalizeActivityName(rawName),
+            color: parseRgbaString(g[9]),
+            icon: extractEmoji(rawName),
+          },
+        ];
+      }),
+    );
+  }
+
+  return new Map();
 }
 
 function formatHms(seconds) {
@@ -83,15 +156,14 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
       <b>Displaying data for:</b> ${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()}
     `;
 
-    const activities = Array.isArray(backup.activities)
-      ? backup.activities
-      : [];
-    const activityMap = new Map(
-      activities.map((a) => [a[0], { name: a[1], color: a[5], icon: a[6] }]),
-    );
+    const activityMap = buildActivityMap(backup);
+    const activities = [...activityMap.entries()].map(([id, activity]) => ({
+      id,
+      ...activity,
+    }));
 
-    const sleepActivity = activities.find((a) => a[1].includes("Sleep"));
-    const sleepActivityId = sleepActivity ? sleepActivity[0] : null;
+    const sleepActivity = activities.find((a) => a.name.includes("Sleep"));
+    const sleepActivityId = sleepActivity ? sleepActivity.id : null;
 
     let rawIntervals = (
       Array.isArray(backup.intervals) ? backup.intervals : []
@@ -175,8 +247,8 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
             datasets: [...activityDurations.entries()].map(([name, duration]) => ({
                 label: name,
                 data: [duration / 3600],
-                backgroundColor: `rgba(${activities.find(a => a[1] === name)[5]})` || '#ccc',
-                icons: [activityMap.get(activities.find(a => a[1] === name)[0]).icon]
+                backgroundColor: activities.find((a) => a.name === name)?.color || '#ccc',
+                icons: [activities.find((a) => a.name === name)?.icon || ""]
             }))
         };
     } else {
@@ -187,12 +259,9 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
             label: "Time Spent",
             data: [...activityDurations.values()].map(d => d/3600), // in hours
             backgroundColor: [...activityDurations.keys()].map(
-                (name) =>
-                `rgba(${
-                    activities.find((a) => a[1] === name)[5]
-                })` || "#ccc",
+                (name) => activities.find((a) => a.name === name)?.color || "#ccc",
             ),
-            icons: [...activityDurations.keys()].map(name => activityMap.get(activities.find(a => a[1] === name)[0]).icon)
+            icons: [...activityDurations.keys()].map(name => activities.find((a) => a.name === name)?.icon || "")
             },
         ],
         };
@@ -210,7 +279,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
           },
           title: {
             display: true,
-            text: "Activity Duration (in hours) for ${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()}",
+            text: `Activity Duration (in hours) for ${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()}`,
           },
           datalabels: {
             anchor: 'end',
