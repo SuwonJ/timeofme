@@ -50,6 +50,21 @@ function parseRgbaString(rgbaString) {
   return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
 }
 
+function formatTime(unixSec) {
+  return new Date(unixSec * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+function cleanTitle(title, activityMap) {
+  if (!title) return null;
+  let cleaned = title.replace(/\{\{goal_(\d+)\}\}/g, (match, idStr) => {
+    const act = activityMap.get(Number(idStr));
+    return act ? act.name : "";
+  });
+  cleaned = cleaned.replace(/\s*#{1,2}[\w_]+/g, "");
+  cleaned = cleaned.trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
 function buildActivityMap(backup) {
   if (Array.isArray(backup.activities) && backup.activities.length > 0) {
     return new Map(
@@ -334,16 +349,30 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
             const activityIcon = activity ? activity.icon : "💡";
             const activityColor = activity ? `rgba(${activity.color})` : "#ccc";
 
+            // Resolve clean title and format notes nicely
+            const cleanedTitle = cleanTitle(i.title, activityMap);
+            let displayNameHtml = `<span class="activity-name-text">${activityName}</span>`;
+            if (cleanedTitle && cleanedTitle.toLowerCase() !== activityName.toLowerCase()) {
+                displayNameHtml = `<span class="activity-name-text">${activityName}</span> <span class="activity-note-text">(${cleanedTitle})</span>`;
+            }
+
+            // Duration format cleanups
+            let durationText = formatHms(i.duration);
+            if (i.settedDuration && Math.abs(i.settedDuration - i.duration) > 5) {
+                durationText += ` | Target: ${formatHms(i.settedDuration)}`;
+            }
+
             if (i.duration < 300) {
                 return `
                     <li class="line-item">
                         <div class="time-label">
-                            ${new Date(i.start * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                            <div>${formatTime(i.start)}</div>
+                            <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${formatTime(i.end)}</div>
                         </div>
                         <div class="timeline-line" style="background-color: ${activityColor};"></div>
                         <div class="activity-details">
-                            <div class="activity-name">${ i.title ? i.title.replace(/\s*#{1,2}[\w_]+/g, "").trim() : activityName}</div>
-                            <div class="duration-info"><small>Tracked: ${formatHms(i.duration)}</small></div>
+                            <div class="activity-name">${displayNameHtml}</div>
+                            <div class="duration-info"><small>Tracked: ${durationText}</small></div>
                         </div>
                     </li>
                 `;
@@ -361,10 +390,8 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
             return `
                 <li>
                 <div class="time-label">
-                    ${new Date(i.start * 1000).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    })}
+                    <div>${formatTime(i.start)}</div>
+                    <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${formatTime(i.end)}</div>
                 </div>
                 <div class="timeline-visual">
                     <div class="timeline-blob ${blobClass}" style="border-color: ${activityColor}; height: ${
@@ -375,21 +402,9 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
                     ${showPath ? '<div class="timeline-path"></div>' : ""}
                 </div>
                 <div class="activity-details">
-                    <div class="activity-name">${
-                    i.title
-                        ? i.title
-                            .replace(/\s*#{1,2}[\w_]+/g, "")
-                            .trim()
-                            .replace(/\s*#{1,2}[\w_]+/g, "")
-                            .trim()
-                            .replace(/\s*#{1,2}[\w_]+/g, "")
-                            .trim()
-                        : activityName
-                    }</div>
+                    <div class="activity-name">${displayNameHtml}</div>
                     <div class="duration-info">
-                    <small>Tracked: ${formatHms(
-                        i.duration,
-                    )} | Set: ${formatHms(i.settedDuration)}</small>
+                        <small>Tracked: ${durationText}</small>
                     </div>
                 </div>
                 </li>
