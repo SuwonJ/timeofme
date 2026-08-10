@@ -53,14 +53,17 @@ function parseRgbaString(rgbaString) {
 function buildActivityMap(backup) {
   if (Array.isArray(backup.activities) && backup.activities.length > 0) {
     return new Map(
-      backup.activities.map((a) => [
-        a[0],
-        {
-          name: a[1],
-          color: parseRgbaString(a[5]),
-          icon: a[6] || "",
-        },
-      ]),
+      backup.activities.map((a) => {
+        const rawName = a[3] || "";
+        return [
+          a[0],
+          {
+            name: normalizeActivityName(rawName),
+            color: parseRgbaString(a[9]),
+            icon: extractEmoji(rawName),
+          },
+        ];
+      }),
     );
   }
 
@@ -169,19 +172,41 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
       Array.isArray(backup.intervals) ? backup.intervals : []
     ).reverse();
     let intervals = [];
-    for (let i = 0; i < rawIntervals.length - 1; i++) {
-      const start = rawIntervals[i][0];
-      const end = rawIntervals[i + 1][0];
-      const duration = end - start;
-      if (duration <= 0) continue;
-      intervals.push({
-        start: start,
-        end: end,
-        duration: duration,
-        settedDuration: rawIntervals[i][1],
-        title: rawIntervals[i][2],
-        activityId: rawIntervals[i][3],
-      });
+    if (rawIntervals.length > 0) {
+      const isNewFormat = rawIntervals[0][0] < 10000000;
+      if (isNewFormat) {
+        for (let i = 0; i < rawIntervals.length - 1; i++) {
+          const current = rawIntervals[i];
+          const start = current[1];
+          const next = rawIntervals[i + 1];
+          const end = next[1];
+          const duration = end - start;
+          if (duration <= 0) continue;
+          intervals.push({
+            start: start,
+            end: end,
+            duration: duration,
+            settedDuration: duration,
+            title: current[3],
+            activityId: current[2],
+          });
+        }
+      } else {
+        for (let i = 0; i < rawIntervals.length - 1; i++) {
+          const start = rawIntervals[i][0];
+          const end = rawIntervals[i + 1][0];
+          const duration = end - start;
+          if (duration <= 0) continue;
+          intervals.push({
+            start: start,
+            end: end,
+            duration: duration,
+            settedDuration: rawIntervals[i][1],
+            title: rawIntervals[i][2],
+            activityId: rawIntervals[i][3],
+          });
+        }
+      }
     }
 
     const rangeIntervals = intervals.filter(i => {
