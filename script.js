@@ -9,32 +9,67 @@ const GIST_ID = gistIdFromUrl || GIST_ID_DEFAULT;
 Chart.register(ChartDataLabels);
 
 async function fetchLogFile() {
-  if (!GIST_ID || GIST_ID === "YOUR_GIST_ID") {
-    throw new Error("Set GIST_ID_DEFAULT or open the page with ?gist=<your_gist_id>");
-  }
-  const res = await fetch(`https://api.github.com/gists/${GIST_ID}`);
-  if (!res.ok) throw new Error(`Failed to fetch gist: ${res.status} ${res.statusText}`);
+  const urlParams = new URLSearchParams(window.location.search);
+  const useLocal = urlParams.get("local") === "true";
 
-  const gist = await res.json();
-  const file = gist.files?.[GIST_FILE];
-  if (!file) throw new Error(`Missing ${GIST_FILE} in gist`);
-
-  if (file.content) {
-    return JSON.parse(file.content);
+  if (useLocal) {
+    const res = await fetch("./backups/timetome_backup.json");
+    if (res.ok) return await res.json();
+    const fallbackRes = await fetch("./backups/log.json");
+    if (fallbackRes.ok) return await fallbackRes.json();
+    throw new Error("Local backup file backups/timetome_backup.json or backups/log.json not found");
   }
 
-  const rawRes = await fetch(file.raw_url);
-  if (!rawRes.ok) throw new Error(`Failed to fetch gist raw file: ${rawRes.status} ${rawRes.statusText}`);
-  return await rawRes.json();
+  try {
+    if (!GIST_ID || GIST_ID === "YOUR_GIST_ID") {
+      throw new Error("Set GIST_ID_DEFAULT or open the page with ?gist=<your_gist_id>");
+    }
+    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`);
+    if (!res.ok) {
+      if (res.status === 403) {
+        console.warn("GitHub Gist rate limit reached. Falling back to local ./backups/timetome_backup.json");
+        const localRes = await fetch("./backups/timetome_backup.json");
+        if (localRes.ok) return await localRes.json();
+        const fallbackRes = await fetch("./backups/log.json");
+        if (fallbackRes.ok) return await fallbackRes.json();
+      }
+      throw new Error(`Failed to fetch gist: ${res.status} ${res.statusText}`);
+    }
+
+    const gist = await res.json();
+    const file = gist.files?.[GIST_FILE];
+    if (!file) throw new Error(`Missing ${GIST_FILE} in gist`);
+
+    if (file.content) {
+      return JSON.parse(file.content);
+    }
+
+    const rawRes = await fetch(file.raw_url);
+    if (!rawRes.ok) throw new Error(`Failed to fetch gist raw file: ${rawRes.status} ${rawRes.statusText}`);
+    return await rawRes.json();
+  } catch (err) {
+    console.error("Gist fetch error, trying local fallback:", err);
+    const localRes = await fetch("./backups/timetome_backup.json");
+    if (localRes.ok) {
+      console.log("Successfully loaded local fallback: ./backups/timetome_backup.json");
+      return await localRes.json();
+    }
+    const fallbackRes = await fetch("./backups/log.json");
+    if (fallbackRes.ok) {
+      console.log("Successfully loaded local fallback: ./backups/log.json");
+      return await fallbackRes.json();
+    }
+    throw err;
+  }
 }
 
 function extractEmoji(text) {
-  const match = (text || "").match(/^(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
+  const match = String(text || "").match(/^(\p{Extended_Pictographic}|\p{Emoji_Presentation})/u);
   return match ? match[0] : "";
 }
 
 function normalizeActivityName(text) {
-  return (text || "")
+  return String(text || "")
     .replace(/#\S+/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -56,7 +91,7 @@ function formatTime(unixSec) {
 
 function cleanTitle(title, activityMap) {
   if (!title) return null;
-  let cleaned = title.replace(/\{\{goal_(\d+)\}\}/g, (match, idStr) => {
+  let cleaned = String(title).replace(/\{\{goal_(\d+)\}\}/g, (match, idStr) => {
     const act = activityMap.get(Number(idStr));
     return act ? act.name : "";
   });
@@ -65,21 +100,134 @@ function cleanTitle(title, activityMap) {
   return cleaned.length > 0 ? cleaned : null;
 }
 
+const EMOJI_TO_MATERIAL = {
+  "🍻": "sports_bar",
+  "🙁": "sentiment_dissatisfied",
+  "🙄": "sentiment_neutral",
+  "⏰": "alarm",
+  "🏛️": "account_balance",
+  "🧪": "science",
+  "📄": "description",
+  "➕": "add",
+  "✏️": "edit",
+  "📐": "square_foot",
+  "📗": "book",
+  "📔": "auto_stories",
+  "😴": "bedtime",
+  "💡": "lightbulb",
+  "👍": "thumb_up",
+  "🧹": "cleaning_services",
+  "📚": "library_books",
+  "🍳": "dinner_dining",
+  "🧘": "self_improvement"
+};
+
+const ICON_TO_MATERIAL = {
+  "book": "book",
+  "case": "work",
+  "timer": "timer",
+  "exercise": "fitness_center",
+  "piano": "piano",
+  "music_note": "music_note",
+  "rocket": "rocket_launch",
+  "bus": "directions_bus",
+  "bulb": "lightbulb",
+  "bolt": "bolt",
+  "option": "settings",
+  "graduationcap": "school",
+  "megaphone": "campaign",
+  "instruments": "music_note",
+  "meditation": "self_improvement",
+  "flask": "science",
+  "compass": "explore",
+  "gamecontroller": "sports_esports",
+  "soccerball": "sports_soccer",
+  "hiking": "hiking",
+  "inbox": "inbox",
+  "sun": "light_mode",
+  "moon": "dark_mode",
+  "moon_stars": "nightlight",
+  "film": "movie",
+  "coffee": "local_cafe",
+  "tennis": "sports_tennis",
+  "surfing": "surfing",
+  "skiing": "downhill_skiing",
+  "fork_knife": "restaurant",
+  "hockey": "sports_hockey",
+  "pencil_note": "edit",
+  "question": "help"
+};
+
+function parseSymbol(symbolRaw, activityName) {
+  if (symbolRaw && typeof symbolRaw === "string") {
+    if (symbolRaw.startsWith("emoji--")) {
+      const emoji = symbolRaw.substring(7);
+      return EMOJI_TO_MATERIAL[emoji] || "star";
+    }
+    if (symbolRaw.startsWith("letter--")) {
+      return symbolRaw.substring(8);
+    }
+    if (symbolRaw.startsWith("icon--")) {
+      const iconCode = symbolRaw.substring(6);
+      return ICON_TO_MATERIAL[iconCode] || "help";
+    }
+    const rawEmoji = extractEmoji(symbolRaw);
+    if (rawEmoji) return EMOJI_TO_MATERIAL[rawEmoji] || "star";
+  }
+  
+  const extracted = extractEmoji(activityName);
+  if (extracted) return EMOJI_TO_MATERIAL[extracted] || "star";
+  
+  return "lightbulb";
+}
+
+function renderTimelineIcon(activity) {
+  if (!activity) return `<span class="material-symbols-rounded" style="font-size: 1.4em; color: #ccc; vertical-align: middle;">help</span>`;
+  const icon = activity.icon || "lightbulb";
+  const color = activity.color || "#ccc";
+  
+  if (icon && icon.length === 1 && /^[a-zA-Z가-힣0-9]$/.test(icon)) {
+    return `<span class="letter-icon" style="font-size: 1.1em; font-weight: 800; color: ${color};">${icon}</span>`;
+  }
+  
+  return `<span class="material-symbols-rounded" style="font-size: 1.4em; color: ${color}; vertical-align: middle;">${icon}</span>`;
+}
+
 function buildActivityMap(backup) {
   if (Array.isArray(backup.activities) && backup.activities.length > 0) {
-    return new Map(
-      backup.activities.map((a) => {
-        const rawName = a[3] || "";
-        return [
-          a[0],
-          {
-            name: normalizeActivityName(rawName),
-            color: parseRgbaString(a[9]),
-            icon: extractEmoji(rawName),
-          },
-        ];
-      }),
-    );
+    const isNewFormat = backup.activities[0].length > 12;
+    if (isNewFormat) {
+      return new Map(
+        backup.activities.map((a) => {
+          const rawName = a[3] || "";
+          return [
+            a[0],
+            {
+              name: normalizeActivityName(rawName),
+              color: parseRgbaString(a[9]),
+              icon: parseSymbol(a[7], rawName),
+              symbolRaw: a[7],
+            },
+          ];
+        }),
+      );
+    } else {
+      // Old format activities mapping: [id, name, seconds, type_id, parent_id, color_rgba, symbol_raw, ...]
+      return new Map(
+        backup.activities.map((a) => {
+          const rawName = a[1] || "";
+          return [
+            a[0],
+            {
+              name: normalizeActivityName(rawName),
+              color: parseRgbaString(a[5]),
+              icon: parseSymbol(a[6], rawName),
+              symbolRaw: a[6],
+            },
+          ];
+        }),
+      );
+    }
   }
 
   if (Array.isArray(backup.goals) && backup.goals.length > 0) {
@@ -91,7 +239,8 @@ function buildActivityMap(backup) {
           {
             name: normalizeActivityName(rawName),
             color: parseRgbaString(g[9]),
-            icon: extractEmoji(rawName),
+            icon: parseSymbol(g[7], rawName),
+            symbolRaw: g[7],
           },
         ];
       }),
@@ -110,6 +259,15 @@ function formatHms(seconds) {
     .padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");
   return `${h}:${m}:${s}`;
+}
+
+function formatHoursMinutes(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) {
+    return `${h}h ${m}m`;
+  }
+  return `${m}m`;
 }
 
 function getDayRange(date) {
@@ -141,7 +299,7 @@ function getMonthRange(date) {
 
 
 async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
-  const summaryEl = document.getElementById("summary");
+
   const detailsEl = document.getElementById("details");
   const dashboardEl = document.getElementById("dashboard");
   const chartEl = document.getElementById("activityChart").getContext("2d");
@@ -170,9 +328,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
         range = getDayRange(targetDate);
     }
 
-    summaryEl.innerHTML = `
-      <b>Displaying data for:</b> ${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()}
-    `;
+    // summaryEl will be populated later with focus metrics and headline
 
     const activityMap = buildActivityMap(backup);
     const activities = [...activityMap.entries()].map(([id, activity]) => ({
@@ -229,26 +385,66 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
         return intervalDate >= range.start && intervalDate <= range.end;
     });
     
-    const restSeconds = rangeIntervals
-      .filter((i) => i.title && i.title.includes("Break"))
-      .reduce((sum, i) => sum + i.duration, 0);
-
     const sleepIntervals = rangeIntervals.filter((i) => i.activityId === sleepActivityId);
     const sleepSeconds = sleepIntervals.reduce((sum, i) => sum + i.duration, 0);
+
+    const focusIntervals = rangeIntervals.filter((i) => {
+      const act = activityMap.get(i.activityId);
+      if (!act) return false;
+      const name = act.name.toLowerCase();
+      // Exclude Sleep/Rest
+      if (name.includes("sleep") || name.includes("rest")) return false;
+      // Exclude Break/Other/Routines
+      if (name.includes("break") || name.includes("other") || name.includes("routines")) return false;
+      // Exclude specific Break titles
+      if (i.title && i.title.toLowerCase().includes("break")) return false;
+      return true;
+    });
+    const focusSeconds = focusIntervals.reduce((sum, i) => sum + i.duration, 0);
+
+    const awakeSeconds = Math.max(3600, 24 * 3600 - sleepSeconds);
+    const focusDensity = (focusSeconds / awakeSeconds) * 100;
+
+    // Remaining Tasks count for the day
+    const tasks = Array.isArray(backup.tasks) ? backup.tasks : [];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayYMD = yesterday.toISOString().slice(0, 10);
+    const leftTasksCount = tasks.filter((t) => {
+      if (typeof t.date === "string") return t.date.startsWith(yesterdayYMD);
+      if (typeof t.due === "string") return t.due.startsWith(yesterdayYMD);
+      return false;
+    }).length;
+
+    // Gazette Dynamic Editorial Headline
+    const focusHours = (focusSeconds / 3600).toFixed(1);
+    const focusDensityPercent = focusDensity.toFixed(0);
+
+    const startStr = range.start.toLocaleDateString();
+    const endStr = range.end.toLocaleDateString();
+    const dateText = (startStr === endStr) ? startStr : `${startStr} - ${endStr}`;
+    const chronologyHeader = document.querySelector(".panel-header h2");
+    if (chronologyHeader) {
+        chronologyHeader.innerHTML = `Chronology <span style="font-size: 0.6em; font-weight: normal; font-style: italic; color: var(--subtle-text-color); margin-left: 0.6em;">(${dateText})</span>`;
+    }
 
     // Dashboard
     dashboardEl.innerHTML = `
       <div class="stat-card">
-        <h3>Rest Time</h3>
-        <p>${formatHms(restSeconds)}</p>
+        <h3>Focus Time</h3>
+        <p>${formatHoursMinutes(focusSeconds)}</p>
+      </div>
+      <div class="stat-card">
+        <h3>Focus Density</h3>
+        <p>${focusDensityPercent}%</p>
       </div>
       <div class="stat-card">
         <h3>Sleep Time</h3>
-        <p>${formatHms(sleepSeconds)}</p>
+        <p>${formatHoursMinutes(sleepSeconds)}</p>
       </div>
       <div class="stat-card">
-        <h3>Intervals</h3>
-        <p>${rangeIntervals.length}</p>
+        <h3>Pending Tasks</h3>
+        <p>${leftTasksCount} left</p>
       </div>
     `;
 
@@ -316,10 +512,23 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
         plugins: {
           legend: {
             display: true,
+            labels: {
+              font: {
+                family: "'Source Serif 4', 'Pretendard', serif",
+                size: 12
+              },
+              color: '#1c1917'
+            }
           },
           title: {
             display: true,
             text: `Activity Duration (in hours) for ${range.start.toLocaleDateString()} - ${range.end.toLocaleDateString()}`,
+            font: {
+              family: "'Source Serif 4', 'Pretendard', serif",
+              size: 13,
+              weight: 'bold'
+            },
+            color: '#1c1917'
           },
           datalabels: {
             anchor: 'end',
@@ -328,11 +537,32 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
               return context.dataset.icons[context.dataIndex];
             },
             font: {
-                size: 16
+                family: "'Material Symbols Rounded'",
+                size: 18
             },
             offset: 8
           }
         },
+        scales: {
+          x: {
+            ticks: {
+              font: {
+                family: "'Source Serif 4', 'Pretendard', serif",
+                size: 11
+              },
+              color: '#1c1917'
+            }
+          },
+          y: {
+            ticks: {
+              font: {
+                family: "'Source Serif 4', 'Pretendard', serif",
+                size: 11
+              },
+              color: '#1c1917'
+            }
+          }
+        }
       },
     });
 
@@ -346,8 +576,8 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
             .map((i, idx, arr) => {
             const activity = activityMap.get(i.activityId);
             const activityName = activity ? activity.name : "Unknown";
-            const activityIcon = activity ? activity.icon : "💡";
-            const activityColor = activity ? `rgba(${activity.color})` : "#ccc";
+            const activityIconHtml = renderTimelineIcon(activity);
+            const activityColor = activity ? activity.color : "#ccc";
 
             // Resolve clean title and format notes nicely
             const cleanedTitle = cleanTitle(i.title, activityMap);
@@ -356,10 +586,11 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
                 displayNameHtml = `<span class="activity-name-text">${activityName}</span> <span class="activity-note-text">(${cleanedTitle})</span>`;
             }
 
-            // Duration format cleanups
-            let durationText = formatHms(i.duration);
+            // Duration calculations and labels
+            const durationLabel = formatHoursMinutes(i.duration);
+            let targetText = "";
             if (i.settedDuration && Math.abs(i.settedDuration - i.duration) > 5) {
-                durationText += ` | Target: ${formatHms(i.settedDuration)}`;
+                targetText = `Target: ${formatHoursMinutes(i.settedDuration)}`;
             }
 
             if (i.duration < 300) {
@@ -367,12 +598,12 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
                     <li class="line-item">
                         <div class="time-label">
                             <div>${formatTime(i.start)}</div>
-                            <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${formatTime(i.end)}</div>
+                            <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${durationLabel}</div>
                         </div>
                         <div class="timeline-line" style="background-color: ${activityColor};"></div>
                         <div class="activity-details">
                             <div class="activity-name">${displayNameHtml}</div>
-                            <div class="duration-info"><small>Tracked: ${durationText}</small></div>
+                            ${targetText ? `<div class="duration-info"><small>${targetText}</small></div>` : ""}
                         </div>
                     </li>
                 `;
@@ -391,21 +622,19 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
                 <li>
                 <div class="time-label">
                     <div>${formatTime(i.start)}</div>
-                    <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${formatTime(i.end)}</div>
+                    <div style="font-size: 0.8em; opacity: 0.6; margin-top: 1px;">${durationLabel}</div>
                 </div>
                 <div class="timeline-visual">
                     <div class="timeline-blob ${blobClass}" style="border-color: ${activityColor}; height: ${
-                    isShort ? 45 : 45 + (i.duration / 60) * 0.2
+                    isShort ? 36 : 36 + (i.duration / 60) * 0.15
                     }px;">
-                    <span class="activity-icon">${activityIcon}</span>
+                    <span class="activity-icon">${activityIconHtml}</span>
                     </div>
                     ${showPath ? '<div class="timeline-path"></div>' : ""}
                 </div>
                 <div class="activity-details">
                     <div class="activity-name">${displayNameHtml}</div>
-                    <div class="duration-info">
-                        <small>Tracked: ${durationText}</small>
-                    </div>
+                    ${targetText ? `<div class="duration-info"><small>${targetText}</small></div>` : ""}
                 </div>
                 </li>
             `;
@@ -417,11 +646,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
         detailsEl.style.display = 'none';
     }
 
-    // Tasks
-    const tasks = Array.isArray(backup.tasks) ? backup.tasks : [];
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayYMD = yesterday.toISOString().slice(0, 10);
+    // Tasks (tasks, yesterday, and yesterdayYMD are already declared above)
     const remainingTasks = tasks.filter((t) => {
       if (typeof t.date === "string") return t.date.startsWith(yesterdayYMD);
       if (typeof t.due === "string") return t.due.startsWith(yesterdayYMD);
@@ -433,8 +658,8 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
         <ul class="task-list">
             ${remainingTasks
             .map((t) => {
-                const raw = t[1] || "Untitled Task";
-                const cleaned = raw
+                const raw = (typeof t[1] === "string") ? t[1] : (t[2] || "Untitled Task");
+                const cleaned = String(raw)
                 .replace(/\s*#{1,2}[\w_]+/g, "")
                 .trim();
                 return `<li>${cleaned}</li>`;
@@ -444,8 +669,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
     `;
 
   } catch (err) {
-    summaryEl.innerHTML = `<b class="error-text">Error:</b> ${err.message}`;
-    detailsEl.innerHTML = "";
+    detailsEl.innerHTML = `<div class="error-text" style="padding: 1em; border: 1px solid var(--border-color); margin-bottom: 1em;"><b>Error:</b> ${err.message}</div>`;
   }
 }
 
