@@ -325,7 +325,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
     if (timeRange === 'daily') {
         detailsEl.style.display = 'block';
         detailsEl.innerHTML = `
-        <h2 class="text-2xl font-bold mt-6 mb-4 text-gray-800">Timeline for ${targetDate.toLocaleDateString()}</h2>
+        <h2>Timeline for ${targetDate.toLocaleDateString()}</h2>
         <ul class="interval-list">
         ${rangeIntervals
             .map((i, idx, arr) => {
@@ -414,7 +414,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
     });
 
     tasksSectionEl.innerHTML = `
-        <h2 class="text-2xl font-bold mt-8 mb-4 text-gray-800">Left Tasks</h2>
+        <h2>Left Tasks</h2>
         <ul class="task-list">
             ${remainingTasks
             .map((t) => {
@@ -429,7 +429,7 @@ async function main(targetDate, timeRange = 'daily', chartType = 'bar') {
     `;
 
   } catch (err) {
-    summaryEl.innerHTML = `<b class="text-red-500">Error:</b> ${err.message}`;
+    summaryEl.innerHTML = `<b class="error-text">Error:</b> ${err.message}`;
     detailsEl.innerHTML = "";
   }
 }
